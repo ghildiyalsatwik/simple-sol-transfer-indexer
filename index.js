@@ -1,57 +1,104 @@
 const { Connection, PublicKey, clusterApiUrl, SystemProgram } = require('@solana/web3.js')
+const express = require("express")
+const cors = require("cors")
+require('dotenv').config()
+
+const app = express()
+
+app.use(cors())
+
+const PORT = process.env.PORT || 3000
 
 const connection = new Connection(clusterApiUrl('devnet'))
 
-const address = new PublicKey('6YuRPBWr7bCsuqqpfyVRWMb4Gi6J6T5YNzgk2tV6Kf38')
+async function getLast5Transactions(publickey) {
 
-let latestTxns = []
+    const latestTxns = []
 
-async function getLast5Transactions() {
+    try {    
+        
+        const address = new PublicKey(publickey)
 
-    const signatures = await connection.getSignaturesForAddress(address, {limit: 10})
+        const signatures = await connection.getSignaturesForAddress(address, {limit: 10})
 
 
-    for(const sigInfo of signatures) {
+        for(const sigInfo of signatures) {
 
-        const { signature } = sigInfo
+            const { signature } = sigInfo
 
-        const tx = await connection.getParsedTransaction(signature, 'confirmed')
+            const tx = await connection.getParsedTransaction(signature, 'confirmed')
 
-        if(!tx) continue
+            if(!tx) continue
 
-        for(const instr of tx.transaction.message.instructions) {
+            for(const instr of tx.transaction.message.instructions) {
 
-            if(instr.programId.equals(SystemProgram.programId) && instr.parsed?.type === 'transfer') {
+                if(instr.programId.equals(SystemProgram.programId) && instr.parsed?.type === 'transfer') {
 
-                const info = instr.parsed.info
+                    const info = instr.parsed.info
 
-                const newTx = {
+                    const newTx = {
 
-                    signature,
-                    from: info.source,
-                    to: info.destination,
-                    amount: info.lamports * 1e9,
-                    time: sigInfo.blockTime,
-                }
-
-                const alreadyExists = latestTxns.find((tx) => tx.signature === signature)
-
-                if(!alreadyExists) {
-
-                    latestTxns.unshift(newTx)
-
-                    if(latestTxns.length > 5) {
-
-                        latestTxns.pop()
+                        signature,
+                        from: info.source,
+                        to: info.destination,
+                        amount: info.lamports/1e9,
+                        time: sigInfo.blockTime,
                     }
+
+                    const alreadyExists = latestTxns.find((tx) => tx.signature === signature)
+
+                    if(!alreadyExists) {
+
+                        latestTxns.unshift(newTx)
+
+                        if(latestTxns.length > 5) {
+
+                            latestTxns.pop()
+                        }
+                    }
+
+
                 }
-
-
             }
         }
+
+        return latestTxns
+
+    } catch (err) {
+        
+        console.error("Error in getLast5Transactions:", err);
+    
     }
 }
 
 
-getLast5Transactions()
+app.get('/transactions', async (req, res) => {
+
+    console.log("Received a request")
+
+    const addressString = req.query.address
+
+    if (!addressString) {
+        
+        return res.status(400).json({ error: "Missing address query parameter" });
+    
+    }
+
+    try {
+        
+        const latestTxns = await getLast5Transactions(addressString)
+
+        res.json(latestTxns)
+
+    } catch(err) {
+
+        res.status(500).json({error: 'Failed to fetch transactions'})
+    }
+})
+
+
+app.listen(PORT, () => {
+
+    console.log(`Server listening on http://localhost:${PORT}`)
+})
 
