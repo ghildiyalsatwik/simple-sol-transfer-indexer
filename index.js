@@ -45,17 +45,9 @@ async function getLast5Transactions(publickey) {
                         time: sigInfo.blockTime,
                     }
 
-                    const alreadyExists = latestTxns.find((tx) => tx.signature === signature)
+                    latestTxns.push(newTx)
 
-                    if(!alreadyExists) {
-
-                        latestTxns.unshift(newTx)
-
-                        if(latestTxns.length > 5) {
-
-                            latestTxns.pop()
-                        }
-                    }
+                    if(latestTxns.length === 5) return latestTxns
 
 
                 }
